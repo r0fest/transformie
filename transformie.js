@@ -1,3 +1,81 @@
+// addEventListener polyfill IE6+
+!window.addEventListener && (function (window, document) {
+  function Event(e, element) {
+    var instance = this;
+
+    for (property in e) {
+      instance[property] = e[property];
+    }
+
+    instance.currentTarget =  element;
+    instance.target = e.srcElement || element;
+    instance.timeStamp = +new Date;
+
+    instance.preventDefault = function () {
+      e.returnValue = false;
+    };
+    instance.stopPropagation = function () {
+      e.cancelBubble = true;
+    };
+  }
+
+  function addEventListener(type, listener) {
+    var
+      element = this,
+      listeners = element.listeners = element.listeners || [],
+      index = listeners.push([listener, function (e) {
+        listener.call(element, new Event(e, element));
+      }]) - 1;
+
+    element.attachEvent('on' + type, listeners[index][1]);
+  }
+
+  function removeEventListener(type, listener) {
+    for (var element = this, listeners = element.listeners || [], length = listeners.length, index = 0; index < length; ++index) {
+      if (listeners[index][0] === listener) {
+        element.detachEvent('on' + type, listeners[index][1]);
+      }
+    }
+  }
+
+  window.addEventListener = document.addEventListener = addEventListener;
+  window.removeEventListener = document.removeEventListener = removeEventListener;
+
+  if ('Element' in window) {
+    Element.prototype.addEventListener    = addEventListener;
+    Element.prototype.removeEventListener = removeEventListener;
+  } else {
+    var
+      head = document.getElementsByTagName('head')[0],
+      style = document.createElement('style');
+
+    head.insertBefore(style, head.firstChild);
+
+    style.styleSheet.cssText = '*{-ms-event-prototype:expression(!this.addEventListener&&(this.addEventListener=addEventListener)&&(this.removeEventListener=removeEventListener))}';
+  }
+})(window, document) && scrollBy(0, 0);
+
+(function () {
+  if (!window.document.querySelectorAll) {
+    document.querySelectorAll = document.body.querySelectorAll = Object.querySelectorAll = function querySelectorAllPolyfill(r, c, i, j, a) {
+      var d=document,
+        s=d.createStyleSheet();
+      a = d.all;
+      c = [];
+      r = r.replace(/\[for\b/gi, '[htmlFor').split(',');
+      for (i = r.length; i--;) {
+        s.addRule(r[i], 'k:v');
+        for (j = a.length; j--;) {
+          a[j].currentStyle.k && c.push(a[j]);
+        }
+        s.removeRule(0);
+      }
+      return c;
+    };
+  }
+})();
+
+
 var Transformie = {
 	
 	defaults: {
@@ -29,17 +107,22 @@ var Transformie = {
 	},
 	
 	track: function(query) {
-		jQuery(query).unbind('propertychange').bind('propertychange', function(e) {
-			if(e.originalEvent.propertyName == 'style.webkitTransform' || e.originalEvent.propertyName == 'style.MozTransform' || e.originalEvent.propertyName == 'style.transform')
-				Transformie.applyMatrixToElement(Transformie.computeMatrix(Transformie.getTransformValue(this.style)), this);
-		});
+		var el = document.querySelectorAll(query);
+
+    el.removeEventListener('propertychange');
+    el.addEventListener('propertychange', function(e) {
+      if(e.originalEvent.propertyName == 'style.webkitTransform' || e.originalEvent.propertyName == 'style.MozTransform' || e.originalEvent.propertyName == 'style.transform')
+        Transformie.applyMatrixToElement(Transformie.computeMatrix(Transformie.getTransformValue(this.style)), this);
+    });
 	},
 	
 	apply: function(selector) {
-		jQuery(selector).each(function() {
-			var foundRule = Transformie.getTransformValue(this.style);
-			foundRule && Transformie.applyMatrixToElement(Transformie.computeMatrix(foundRule), this);
-		});
+    var el = document.querySelectorAll(selector);
+
+    for (var i = 0; i < el.length; i++) {
+      var foundRule = Transformie.getTransformValue(el[i].style);
+      foundRule && Transformie.applyMatrixToElement(Transformie.computeMatrix(foundRule), el[i]);
+    }
 	},
 	
 	parseStylesheets: function() {	
@@ -59,11 +142,13 @@ var Transformie = {
 		//TODO: Figure what to do with :hover, can't just apply it to found elements
 		if(selector.indexOf && selector.indexOf(':hover') != -1)
 			return;
-		
-		jQuery(selector).each(function() {
-			Transformie.applyMatrixToElement(matrix, this);
-		});
-		
+
+    var el = document.querySelectorAll(selector);
+
+    for (var i = 0; i < el.length; i++) {
+      Transformie.applyMatrixToElement(matrix, el[i]);
+    }
+
 	},
 	
 	applyMatrixToElement: function(matrix, element) {
@@ -181,7 +266,7 @@ var Transformie = {
 };
 
 
-jQuery(function() {
+(function() {
 
 	if( navigator.userAgent.indexOf("MSIE ") == -1) return;
 
@@ -194,4 +279,4 @@ jQuery(function() {
 	// we have a dynamic site and we want to track inline style changes on a list of elements
 	Transformie.defaults.track && Transformie.track(Transformie.defaults.track);
 	
-});
+})();
